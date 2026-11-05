@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N-Queens Chess Puzzle</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Cinzel', 'serif'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#151f32',
+                            950: '#090d16',
+                        },
+                        board: {
+                            lightWood: '#f0d9b5',
+                            darkWood: '#b58863',
+                            lightSlate: '#e2e8f0',
+                            darkSlate: '#475569',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Pulse & Glow Effects */
+        .queen-conflict {
+            animation: pulse-red 1.2s infinite alternate;
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.8)); }
+            100% { transform: scale(1.1); filter: drop-shadow(0 0 14px rgba(239, 68, 68, 1)); }
+        }
+
+        .queen-placed {
+            animation: pop-in 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes pop-in {
+            0% { transform: scale(0) rotate(-45deg); opacity: 0; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        .threat-cell {
+            background-image: radial-gradient(circle, rgba(239, 68, 68, 0.3) 15%, transparent 16%);
+            background-size: 12px 12px;
+        }
+
+        /* Chess Board Styles */
+        .board-theme-wood .cell-light { background-color: #f0d9b5; color: #b58863; }
+        .board-theme-wood .cell-dark { background-color: #b58863; color: #f0d9b5; }
+        .board-theme-wood .cell-hover:hover { background-color: #d6bd96 !important; }
+
+        .board-theme-slate .cell-light { background-color: #cbd5e1; color: #475569; }
+        .board-theme-slate .cell-dark { background-color: #475569; color: #cbd5e1; }
+        .board-theme-slate .cell-hover:hover { background-color: #94a3b8 !important; }
+
+        .board-theme-emerald .cell-light { background-color: #e6f4ea; color: #137333; }
+        .board-theme-emerald .cell-dark { background-color: #2d6a4f; color: #d8f3dc; }
+        .board-theme-emerald .cell-hover:hover { background-color: #b7e4c7 !important; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
+
+    <!-- HEADER / NAVBAR -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-slate-950 font-serif text-2xl font-bold shadow-lg shadow-amber-500/20">
+                    ♛
+                </div>
+                <div>
+                    <h1 class="font-serif text-xl md:text-2xl font-bold tracking-wide text-slate-100">N-Queens Master</h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">Place N non-attacking queens on an N×N board</p>
+                </div>
+            </div>
+
+            <!-- Top Actions / Controls -->
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <!-- Sound Toggle -->
+                <button id="soundToggleBtn" onclick="toggleSound()" class="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors" title="Toggle Sound">
+                    <i class="fas fa-volume-up text-sm"></i>
+                </button>
+
+                <!-- Rules / How to play modal trigger -->
+                <button onclick="toggleModal('rulesModal', true)" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium transition-colors flex items-center gap-1.5">
+                    <i class="fas fa-question-circle text-amber-400"></i>
+                    <span class="hidden sm:inline">Rules</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTAINER -->
+    <main class="max-w-6xl mx-auto px-4 py-6 w-full flex-grow flex flex-col lg:flex-row gap-8 items-center lg:items-start justify-center">
+
+        <!-- LEFT/CENTER PANEL: BOARD & STATS -->
+        <div class="flex flex-col items-center w-full max-w-xl">
+            
+            <!-- STATS BAR -->
+            <div class="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-4 mb-4 grid grid-cols-4 gap-2 text-center shadow-lg">
+                <!-- Queens Placed -->
+                <div class="flex flex-col items-center justify-center border-r border-slate-800 px-1">
+                    <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Queens</span>
+                    <div class="text-lg sm:text-xl font-bold text-amber-400 mt-0.5 flex items-center gap-1">
+                        <i class="fas fa-chess-queen text-xs"></i>
+                        <span id="placedCount">0</span>/<span id="totalQueensTarget">8</span>
+                    </div>
+                </div>
+
+                <!-- Timer -->
+                <div class="flex flex-col items-center justify-center border-r border-slate-800 px-1">
+                    <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Time</span>
+                    <span id="timerDisplay" class="text-lg sm:text-xl font-bold text-slate-100 font-mono mt-0.5">00:00</span>
+                </div>
+
+                <!-- Moves -->
+                <div class="flex flex-col items-center justify-center border-r border-slate-800 px-1">
+                    <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Moves</span>
+                    <span id="moveCounter" class="text-lg sm:text-xl font-bold text-slate-100 font-mono mt-0.5">0</span>
+                </div>
+
+                <!-- Status / Conflicts -->
+                <div class="flex flex-col items-center justify-center px-1">
+                    <span class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Status</span>
+                    <span id="statusBadge" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-1">
+                        Valid
+                    </span>
+                </div>
+            </div>
+
+            <!-- CHESS BOARD CONTAINER -->
+            <div class="relative w-full aspect-square max-w-[520px] bg-slate-900 border-4 border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-2 sm:p-3 flex flex-col">
+                
+                <!-- Board Grid -->
+                <div id="chessboard" class="w-full h-full grid rounded-lg overflow-hidden border border-slate-700/60 transition-all duration-300 board-theme-wood">
+                    <!-- Board cells rendered dynamically -->
+                </div>
+
+                <!-- Auto Solver Overlay Shield (Disables clicks while solver runs) -->
+                <div id="solverOverlay" class="hidden absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] z-30 flex flex-col items-center justify-center space-y-3">
+                    <div class="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-amber-400 font-semibold text-sm tracking-wide">Backtracking Auto-Solver active...</p>
+                    <button onclick="stopAutoSolve()" class="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs shadow-lg transition">
+                        Stop Solver
+                    </button>
+                </div>
+            </div>
+
+            <!-- QUICK BOARD CONTROLS -->
+            <div class="w-full mt-4 flex items-center justify-between text-xs text-slate-400 px-1">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-lightbulb text-amber-400"></i>
+                    <span>Click cell to place/remove a Queen.</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="solutionsCountText" class="font-medium text-slate-300">Solutions: 92 total</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT PANEL: CONTROLS, DIFFICULTY, OPTIONS -->
+        <div class="w-full lg:w-80 flex flex-col gap-5">
+            
+            <!-- BOARD SIZE / DIFFICULTY SELECTOR -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+                    <i class="fas fa-th-large text-amber-400"></i> Board Size
+                </h2>
+                <div class="grid grid-cols-2 gap-2" id="boardSizeGroup">
+                    <button onclick="changeBoardSize(4)" data-size="4" class="size-btn px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold flex flex-col items-center transition">
+                        <span>4 × 4</span>
+                        <span class="text-[10px] text-slate-400 font-normal">Easy (2 solns)</span>
+                    </button>
+                    <button onclick="changeBoardSize(5)" data-size="5" class="size-btn px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold flex flex-col items-center transition">
+                        <span>5 × 5</span>
+                        <span class="text-[10px] text-slate-400 font-normal">Medium (10)</span>
+                    </button>
+                    <button onclick="changeBoardSize(6)" data-size="6" class="size-btn px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold flex flex-col items-center transition">
+                        <span>6 × 6</span>
+                        <span class="text-[10px] text-slate-400 font-normal">Hard (4 solns)</span>
+                    </button>
+                    <button onclick="changeBoardSize(8)" data-size="8" class="size-btn px-3 py-2.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-400 text-sm font-semibold flex flex-col items-center transition">
+                        <span>8 × 8</span>
+                        <span class="text-[10px] text-amber-400/80 font-normal">Classic (92)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- VISUAL & ASSIST OPTIONS -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-4">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-2">
+                    <i class="fas fa-sliders-h text-amber-400"></i> Board Settings
+                </h2>
+
+                <!-- Theme selector -->
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-300 font-medium">Board Theme</span>
+                    <select id="boardThemeSelect" onchange="changeTheme(this.value)" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-amber-500">
+                        <option value="wood" selected>Classic Wood</option>
+                        <option value="slate">Modern Slate</option>
+                        <option value="emerald">Emerald Forest</option>
+                    </select>
+                </div>
+
+                <!-- Show Threat Paths Toggle -->
+                <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+                    <div class="flex flex-col">
+                        <span class="text-xs text-slate-300 font-medium">Show Threat Zones</span>
+                        <span class="text-[10px] text-slate-500">Highlight attack directions</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="toggleThreats" onchange="toggleThreatOverlay()" class="sr-only peer" checked>
+                        <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-300 after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- ACTION BUTTONS -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg space-y-3">
+                <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-2">
+                    <i class="fas fa-gamepad text-amber-400"></i> Game Actions
+                </h2>
+
+                <!-- Hint & Undo Row -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="getHint()" class="px-3 py-2.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-semibold flex items-center justify-center gap-2 transition active:scale-95">
+                        <i class="fas fa-magic"></i> Hint
+                    </button>
+
+                    <button onclick="undoMove()" class="px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition active:scale-95">
+                        <i class="fas fa-undo"></i> Undo
+                    </button>
+                </div>
+
+                <!-- Reset Board -->
+                <button onclick="resetBoard()" class="w-full px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition active:scale-95">
+                    <i class="fas fa-rotate-right text-rose-400"></i> Clear Board
+                </button>
+
+                <!-- Auto Solver Section -->
+                <div class="pt-3 border-t border-slate-800 space-y-2">
+                    <button onclick="startAutoSolve()" class="w-full px-3 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10 transition active:scale-95">
+                        <i class="fas fa-robot text-sm"></i> Auto-Solve (Visualize)
+                    </button>
+
+                    <!-- Speed Slider -->
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
+                        <span>Speed:</span>
+                        <input type="range" id="solveSpeed" min="20" max="400" value="150" class="w-28 accent-amber-500 cursor-pointer">
+                        <span id="speedValueText">Normal</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-slate-900 bg-slate-950/60 py-3 text-center text-xs text-slate-500">
+        N-Queens Interactive Puzzle & Backtracking Algorithm Visualizer
+    </footer>
+
+    <!-- RULES MODAL -->
+    <div id="rulesModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative animate-pop-in">
+            <button onclick="toggleModal('rulesModal', false)" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+                <i class="fas fa-times text-lg"></i>
+            </button>
+            
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xl">
+                    <i class="fas fa-chess-queen"></i>
+                </div>
+                <h3 class="text-lg font-serif font-bold text-slate-100">How to Play N-Queens</h3>
+            </div>
+
+            <div class="space-y-3 text-sm text-slate-300 leading-relaxed">
+                <p>
+                    The <strong>N-Queens Puzzle</strong> is a classic chess puzzle. The objective is to place <strong>N queens</strong> on an <strong>N × N chessboard</strong> such that no two queens threaten each other.
+                </p>
+                <div class="bg-slate-800/60 border border-slate-700/60 rounded-lg p-3 space-y-1.5 text-xs">
+                    <div class="flex items-center gap-2 text-rose-400 font-medium">
+                        <i class="fas fa-exclamation-triangle"></i> Conflict Rules:
+                    </div>
+                    <p class="text-slate-400">No two queens can share the same:</p>
+                    <ul class="list-disc list-inside text-slate-300 space-y-0.5">
+                        <li>Horizontal Row</li>
+                        <li>Vertical Column</li>
+                        <li>Diagonal Line</li>
+                    </ul>
+                </div>
+                <p class="text-xs text-slate-400">
+                    💡 <em>Tip: Use the "Threat Zones" toggle to see red highlight lines representing queen sightlines!</em>
+                </p>
+            </div>
+
+            <button onclick="toggleModal('rulesModal', false)" class="w-full mt-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition">
+                Got It!
+            </button>
+        </div>
+    </div>
+
+    <!-- WIN CELEBRATION MODAL -->
+    <div id="winModal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-md w-full p-6 text-center shadow-2xl relative animate-pop-in">
+            <!-- Trophy Icon -->
+            <div class="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 border-2 border-amber-500/50 flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce">
+                🏆
+            </div>
+
+            <h3 class="text-2xl font-serif font-bold text-amber-400 mb-1">Puzzle Solved!</h3>
+            <p class="text-sm text-slate-300 mb-6">Masterfully placed all queens without a single conflict!</p>
+
+            <!-- Stats Summary -->
+            <div class="grid grid-cols-3 gap-2 bg-slate-800/80 border border-slate-700/60 rounded-xl p-3 mb-6">
+                <div>
+                    <span class="text-[10px] uppercase text-slate-400 block font-semibold">Board</span>
+                    <span id="winBoardSize" class="text-base font-bold text-slate-100">8×8</span>
+                </div>
+                <div>
+                    <span class="text-[10px] uppercase text-slate-400 block font-semibold">Time</span>
+                    <span id="winTime" class="text-base font-bold text-amber-400 font-mono">01:23</span>
+                </div>
+                <div>
+                    <span class="text-[10px] uppercase text-slate-400 block font-semibold">Moves</span>
+                    <span id="winMoves" class="text-base font-bold text-slate-100 font-mono">12</span>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="toggleModal('winModal', false); resetBoard();" class="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold transition">
+                    Play Again
+                </button>
+                <button onclick="toggleModal('winModal', false); changeBoardSize(boardSize === 8 ? 4 : boardSize + 1);" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm transition">
+                    Next Challenge
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT GAME LOGIC -->
+    <script>
+        // --- GAME STATE VARIABLES ---
+        let boardSize = 8;
+        let queens = []; // Array of objects: [{ r: 0, c: 4 }, ...]
+        let moveCount = 0;
+        let timerSeconds = 0;
+        let timerInterval = null;
+        let timerStarted = false;
+        let moveHistory = []; // Stack for undo functionality
+        let showThreats = true;
+        let soundEnabled = true;
+        let isSolving = false;
+        let solverStopRequested = false;
+
+        // Solution counts for standard sizes
+        const solutionCounts = { 4: 2, 5: 10, 6: 4, 7: 40, 8: 92, 9: 352, 10: 724 };
+
+        // --- WEB AUDIO API FOR SFX ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioContext();
+            }
+        }
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'place') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else if (type === 'remove') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600, now);
+                    osc.frequency.exponentialRampToValueAtTime(300, now + 0.08);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'conflict') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, now);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                } else if (type === 'win') {
+                    // Quick arpeggio
+                    [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                        const o = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        o.connect(g);
+                        g.connect(audioCtx.destination);
+                        o.frequency.value = freq;
+                        g.gain.setValueAtTime(0.15, now + idx * 0.08);
+                        g.gain.linearRampToValueAtTime(0.01, now + idx * 0.08 + 0.2);
+                        o.start(now + idx * 0.08);
+                        o.stop(now + idx * 0.08 + 0.2);
+                    });
+                }
+            } catch (e) {
+                // Ignore audio restriction errors
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('soundToggleBtn');
+            btn.innerHTML = soundEnabled ? '<i class="fas fa-volume-up text-sm"></i>' : '<i class="fas fa-volume-mute text-sm text-rose-400"></i>';
+        }
+
+        // --- TIMER LOGIC ---
+        function startTimer() {
+            if (timerStarted) return;
+            timerStarted = true;
+            timerInterval = setInterval(() => {
+                timerSeconds++;
+                const mins = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
+                const secs = String(timerSeconds % 60).padStart(2, '0');
+                document.getElementById('timerDisplay').innerText = `${mins}:${secs}`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            timerStarted = false;
+        }
+
+        function resetTimer() {
+            stopTimer();
+            timerSeconds = 0;
+            document.getElementById('timerDisplay').innerText = '00:00';
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = () => {
+            renderBoard();
+            updateStats();
+            updateBoardSizeUI();
+
+            // Speed slider label listener
+            document.getElementById('solveSpeed').addEventListener('input', (e) => {
+                const val = e.target.value;
+                const label = document.getElementById('speedValueText');
+                if (val < 80) label.innerText = 'Fast';
+                else if (val < 250) label.innerText = 'Normal';
+                else label.innerText = 'Slow';
+            });
+        };
+
+        // --- BOARD RENDERER & INTERACTION ---
+        function renderBoard() {
+            const boardEl = document.getElementById('chessboard');
+            boardEl.style.gridTemplateColumns = `repeat(${boardSize}, minmax(0, 1fr))`;
+            boardEl.style.gridTemplateRows = `repeat(${boardSize}, minmax(0, 1fr))`;
+            boardEl.innerHTML = '';
+
+            const conflicts = computeConflicts();
+            const threatenedCells = computeThreatenedCells();
+
+            for (let r = 0; r < boardSize; r++) {
+                for (let c = 0; c < boardSize; c++) {
+                    const cell = document.createElement('div');
+                    const isDark = (r + c) % 2 === 1;
+                    const hasQueen = queens.some(q => q.r === r && q.c === c);
+                    const isConflicting = conflicts.some(q => q.r === r && q.c === c);
+                    const isThreatened = showThreats && threatenedCells.has(`${r},${c}`) && !hasQueen;
+
+                    cell.className = `relative flex items-center justify-center cursor-pointer select-none transition-colors duration-150 cell-hover ${
+                        isDark ? 'cell-dark' : 'cell-light'
+                    } ${isThreatened ? 'threat-cell' : ''}`;
+
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.onclick = () => handleCellClick(r, c);
+
+                    // Rank & File Notation Labels
+                    if (c === 0) {
+                        const rankLabel = document.createElement('span');
+                        rankLabel.className = `absolute top-0.5 left-1 text-[9px] font-mono font-bold opacity-40 pointer-events-none`;
+                        rankLabel.innerText = boardSize - r;
+                        cell.appendChild(rankLabel);
+                    }
+                    if (r === boardSize - 1) {
+                        const fileLabel = document.createElement('span');
+                        fileLabel.className = `absolute bottom-0.5 right-1 text-[9px] font-mono font-bold opacity-40 pointer-events-none`;
+                        fileLabel.innerText = String.fromCharCode(97 + c);
+                        cell.appendChild(fileLabel);
+                    }
+
+                    // Render Queen Icon if present
+                    if (hasQueen) {
+                        const queenIcon = document.createElement('div');
+                        queenIcon.className = `w-full h-full flex items-center justify-center text-2xl sm:text-3xl md:text-4xl leading-none font-bold ${
+                            isConflicting ? 'text-rose-500 queen-conflict' : 'text-amber-400 queen-placed drop-shadow-md'
+                        }`;
+                        queenIcon.innerHTML = '♛';
+                        cell.appendChild(queenIcon);
+
+                        // Small Warning badge if conflicting
+                        if (isConflicting) {
+                            const badge = document.createElement('div');
+                            badge.className = 'absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping';
+                            cell.appendChild(badge);
+                        }
+                    }
+
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
+        // --- CELL CLICK HANDLER ---
+        function handleCellClick(r, c) {
+            if (isSolving) return;
+            startTimer();
+
+            const existingIdx = queens.findIndex(q => q.r === r && q.c === c);
+
+            if (existingIdx !== -1) {
+                // Remove Queen
+                queens.splice(existingIdx, 1);
+                moveHistory.push({ action: 'remove', r, c });
+                playSound('remove');
+            } else {
+                // Place Queen
+                queens.push({ r, c });
+                moveHistory.push({ action: 'place', r, c });
+                
+                // Play sound depending on conflict
+                const conflicts = computeConflicts();
+                const isThisConflicting = conflicts.some(q => q.r === r && q.c === c);
+                if (isThisConflicting) {
+                    playSound('conflict');
+                } else {
+                    playSound('place');
+                }
+            }
+
+            moveCount++;
+            renderBoard();
+            updateStats();
+            checkVictory();
+        }
+
+        // --- CONFLICT & THREAT CALCULATION ---
+        function computeConflicts() {
+            const conflictingSet = new Set();
+
+            for (let i = 0; i < queens.length; i++) {
+                for (let j = i + 1; j < queens.length; j++) {
+                    const q1 = queens[i];
+                    const q2 = queens[j];
+
+                    // Check row, col, diagonals
+                    const sameRow = q1.r === q2.r;
+                    const sameCol = q1.c === q2.c;
+                    const sameDiag = Math.abs(q1.r - q2.r) === Math.abs(q1.c - q2.c);
+
+                    if (sameRow || sameCol || sameDiag) {
+                        conflictingSet.add(`${q1.r},${q1.c}`);
+                        conflictingSet.add(`${q2.r},${q2.c}`);
+                    }
+                }
+            }
+
+            return Array.from(conflictingSet).map(coord => {
+                const [r, c] = coord.split(',').map(Number);
+                return { r, c };
+            });
+        }
+
+        function computeThreatenedCells() {
+            const threatened = new Set();
+            queens.forEach(q => {
+                for (let r = 0; r < boardSize; r++) {
+                    for (let c = 0; c < boardSize; c++) {
+                        if (r === q.r && c === q.c) continue;
+                        if (r === q.r || c === q.c || Math.abs(r - q.r) === Math.abs(c - q.c)) {
+                            threatened.add(`${r},${c}`);
+                        }
+                    }
+                }
+            });
+            return threatened;
+        }
+
+        // --- UPDATE STATS & UI BADGES ---
+        function updateStats() {
+            document.getElementById('placedCount').innerText = queens.length;
+            document.getElementById('totalQueensTarget').innerText = boardSize;
+            document.getElementById('moveCounter').innerText = moveCount;
+
+            const conflicts = computeConflicts();
+            const statusBadge = document.getElementById('statusBadge');
+
+            if (conflicts.length > 0) {
+                statusBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20';
+                statusBadge.innerHTML = `<i class="fas fa-exclamation-triangle mr-1 text-[10px]"></i> ${conflicts.length} Conflict${conflicts.length > 1 ? 's' : ''}`;
+            } else if (queens.length === boardSize) {
+                statusBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                statusBadge.innerHTML = `<i class="fas fa-check-circle mr-1 text-[10px]"></i> Solved!`;
+            } else {
+                statusBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                statusBadge.innerHTML = `<i class="fas fa-shield-alt mr-1 text-[10px]"></i> Valid`;
+            }
+
+            const solns = solutionCounts[boardSize] || 'Multiple';
+            document.getElementById('solutionsCountText').innerText = `Solutions: ${solns} total`;
+        }
+
+        // --- VICTORY CHECK ---
+        function checkVictory() {
+            const conflicts = computeConflicts();
+            if (queens.length === boardSize && conflicts.length === 0) {
+                stopTimer();
+                playSound('win');
+
+                // Trigger Confetti
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+
+                // Populate Win Modal Stats
+                document.getElementById('winBoardSize').innerText = `${boardSize}×${boardSize}`;
+                document.getElementById('winTime').innerText = document.getElementById('timerDisplay').innerText;
+                document.getElementById('winMoves').innerText = moveCount;
+
+                setTimeout(() => {
+                    toggleModal('winModal', true);
+                }, 350);
+            }
+        }
+
+        // --- CONTROL ACTIONS ---
+        function changeBoardSize(size) {
+            boardSize = size;
+            resetBoard();
+            updateBoardSizeUI();
+        }
+
+        function updateBoardSizeUI() {
+            document.querySelectorAll('.size-btn').forEach(btn => {
+                const s = parseInt(btn.dataset.size);
+                if (s === boardSize) {
+                    btn.className = 'size-btn px-3 py-2.5 rounded-lg border border-amber-500/50 bg-amber-500/10 text-amber-400 text-sm font-semibold flex flex-col items-center transition shadow-md shadow-amber-500/10';
+                } else {
+                    btn.className = 'size-btn px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold flex flex-col items-center transition';
+                }
+            });
+        }
+
+        function resetBoard() {
+            if (isSolving) stopAutoSolve();
+            queens = [];
+            moveHistory = [];
+            moveCount = 0;
+            resetTimer();
+            renderBoard();
+            updateStats();
+        }
+
+        function undoMove() {
+            if (isSolving || moveHistory.length === 0) return;
+            const lastMove = moveHistory.pop();
+            
+            if (lastMove.action === 'place') {
+                queens = queens.filter(q => !(q.r === lastMove.r && q.c === lastMove.c));
+            } else if (lastMove.action === 'remove') {
+                queens.push({ r: lastMove.r, c: lastMove.c });
+            }
+
+            moveCount++;
+            playSound('remove');
+            renderBoard();
+            updateStats();
+        }
+
+        function toggleThreatOverlay() {
+            showThreats = document.getElementById('toggleThreats').checked;
+            renderBoard();
+        }
+
+        function changeTheme(themeName) {
+            const board = document.getElementById('chessboard');
+            board.className = `w-full h-full grid rounded-lg overflow-hidden border border-slate-700/60 transition-all duration-300 board-theme-${themeName}`;
+        }
+
+        // --- HINT ALGORITHM ---
+        function getHint() {
+            if (isSolving) return;
+
+            // Find all solutions for current board size
+            const allSolutions = findAllSolutions(boardSize);
+            
+            // Filter solutions compatible with current non-conflicting queens
+            const validCurrentQueens = queens.filter(q => {
+                const conflicts = computeConflicts();
+                return !conflicts.some(cq => cq.r === q.r && cq.c === q.c);
+            });
+
+            const compatibleSolutions = allSolutions.filter(sol => {
+                return validCurrentQueens.every(q => sol[q.r] === q.c);
+            });
+
+            if (compatibleSolutions.length === 0) {
+                alert('No solution exists from your current queen arrangement! Try clearing or undoing conflicting queens.');
+                return;
+            }
+
+            // Pick a random compatible solution
+            const sol = compatibleSolutions[Math.floor(Math.random() * compatibleSolutions.length)];
+            
+            // Find a row that doesn't have a queen yet
+            for (let r = 0; r < boardSize; r++) {
+                if (!queens.some(q => q.r === r)) {
+                    queens.push({ r, c: sol[r] });
+                    moveCount++;
+                    moveHistory.push({ action: 'place', r, c: sol[r] });
+                    playSound('place');
+                    renderBoard();
+                    updateStats();
+                    checkVictory();
+                    return;
+                }
+            }
+        }
+
+        // Solve Helper: Returns array of solution arrays where sol[row] = col
+        function findAllSolutions(N) {
+            const results = [];
+            const cols = new Set();
+            const diag1 = new Set(); // r - c
+            const diag2 = new Set(); // r + c
+
+            function backtrack(r, currentSol) {
+                if (r === N) {
+                    results.push([...currentSol]);
+                    return;
+                }
+                for (let c = 0; c < N; c++) {
+                    if (cols.has(c) || diag1.has(r - c) || diag2.has(r + c)) continue;
+
+                    cols.add(c);
+                    diag1.add(r - c);
+                    diag2.add(r + c);
+                    currentSol.push(c);
+
+                    backtrack(r + 1, currentSol);
+
+                    cols.delete(c);
+                    diag1.delete(r - c);
+                    diag2.delete(r + c);
+                    currentSol.pop();
+                }
+            }
+
+            backtrack(0, []);
+            return results;
+        }
+
+        // --- AUTO-SOLVER VISUALIZATION (BACKTRACKING) ---
+        async function startAutoSolve() {
+            if (isSolving) return;
+            resetBoard();
+            isSolving = true;
+            solverStopRequested = false;
+
+            document.getElementById('solverOverlay').classList.remove('hidden');
+
+            const board = Array(boardSize).fill(-1);
+            await solveBacktrackVisual(0, board);
+
+            document.getElementById('solverOverlay').classList.add('hidden');
+            isSolving = false;
+            updateStats();
+            checkVictory();
+        }
+
+        function stopAutoSolve() {
+            solverStopRequested = true;
+            isSolving = false;
+            document.getElementById('solverOverlay').classList.add('hidden');
+        }
+
+        async function solveBacktrackVisual(row, board) {
+            if (solverStopRequested) return false;
+
+            if (row === boardSize) {
+                return true; // Found solution
+            }
+
+            for (let col = 0; col < boardSize; col++) {
+                if (solverStopRequested) return false;
+
+                // Test placement
+                if (isSafePlacement(row, col, board)) {
+                    board[row] = col;
+                    queens = board.slice(0, row + 1).map((c, r) => ({ r, c }));
+                    renderBoard();
+                    playSound('place');
+
+                    const delay = parseInt(document.getElementById('solveSpeed').value);
+                    await new Promise(res => setTimeout(res, delay));
+
+                    if (await solveBacktrackVisual(row + 1, board)) {
+                        return true;
+                    }
+
+                    // Backtrack
+                    board[row] = -1;
+                    queens = board.filter(c => c !== -1).map((c, r) => ({ r, c }));
+                    renderBoard();
+                    playSound('remove');
+                    await new Promise(res => setTimeout(res, delay / 2));
+                }
+            }
+            return false;
+        }
+
+        function isSafePlacement(row, col, board) {
+            for (let r = 0; r < row; r++) {
+                const c = board[r];
+                if (c === col || Math.abs(c - col) === Math.abs(r - row)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // --- MODAL UTILS ---
+        function toggleModal(id, show) {
+            const modal = document.getElementById(id);
+            if (show) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
